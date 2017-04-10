@@ -13,3 +13,5 @@ Any pull requests and issues are welcome.
 Implementing this would not be possible without:
 
 - The algorithm and lookup tables by Paul Bourke <http://paulbourke.net/geometry/polygonise/>
+- The gradient normals calculation <http://www.angelfire.com/linux/myp/MCAdvanced/MCImproved.html>
+- Vil√m Otte <https://github.com/Zgragselus>, and his debugging/troubleshooting skills

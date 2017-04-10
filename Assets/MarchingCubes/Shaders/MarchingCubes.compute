@@ -1,14 +1,14 @@
 ﻿/**
  * Lookup tables and algorithm taken from "Polygonising a scalar field" by Paul Bourke
- * 
+ *
  * Original at: http://paulbourke.net/geometry/polygonise/
  */
 
 #pragma kernel MarchingCubes
 
 Texture3D<float4> _densityTexture;
-float _isoLevel = 0.5;
-int _gridSize = 64;
+float _isoLevel;
+int _gridSize;
 
 struct Vertex
 {
@@ -22,6 +22,8 @@ struct Triangle
 };
 
 AppendStructuredBuffer<Triangle> triangleRW;
+
+SamplerState myLinearClampSampler;
 
 static const int edgeTable[256] = {
 	0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
@@ -319,17 +321,31 @@ float SampleData(int3 pos) {
 	return _densityTexture.Load(int4(pos, 0)).x;
 }
 
+float SampleLinear(float3 p)
+{
+	// need to mitigate the offset in p[x], so +float3(0.5) to be in [0;1] range
+	return _densityTexture.SampleLevel(myLinearClampSampler, p + float3(0.5, 0.5, 0.5), 0).x;
+}
+
 float3 VertexInterp(float3 p1, float3 p2, float valp1, float valp2)
 {
-	if (abs(_isoLevel - valp1) < 0.00001)
-		return p1;
-	if (abs(_isoLevel - valp2) < 0.00001)
-		return p2;
-	if (abs(valp1 - valp2) < 0.00001)
-		return p1;
+	return lerp(p1, p2, (_isoLevel - valp1) / (valp2 - valp1));
+}
 
-	float mu = (_isoLevel - valp1) / (valp2 - valp1);
-	return float3(p1.x + mu * (p2.x - p1.x), p1.y + mu * (p2.y - p1.y), p1.z + mu * (p2.z - p1.z));
+float3 CalculateGradient(float3 p)
+{
+	float ratio = 1.0 / (_gridSize - 1);
+
+	return float3(
+		SampleLinear(p - float3(1.0, 0.0, 0.0) * ratio)
+		- SampleLinear(p + float3(1.0, 0.0, 0.0) * ratio),
+
+		SampleLinear(p - float3(0.0, 1.0, 0.0) * ratio)
+		- SampleLinear(p + float3(0.0, 1.0, 0.0) * ratio),
+
+		SampleLinear(p - float3(0.0, 0.0, 1.0) * ratio)
+		- SampleLinear(p + float3(0.0, 0.0, 1.0) * ratio)
+		);
 }
 
 [numthreads(8, 8, 8)]
@@ -338,25 +354,25 @@ void MarchingCubes(uint3 threadId : SV_DispatchThreadID)
 	float3 offset = float3(-0.5, -0.5, -0.5);
 
 	float3 p[8] = {
-		p[0] = (threadId + float3(-1, -1, 1)) / (_gridSize + 2) + offset,
-		p[1] = (threadId + float3(1, -1, 1)) / (_gridSize + 2) + offset,
-		p[2] = (threadId + float3(1, -1, -1)) / (_gridSize + 2) + offset,
-		p[3] = (threadId + float3(-1, -1, -1)) / (_gridSize + 2) + offset,
-		p[4] = (threadId + float3(-1, 1, 1)) / (_gridSize + 2) + offset,
-		p[5] = (threadId + float3(1, 1, 1)) / (_gridSize + 2) + offset,
-		p[6] = (threadId + float3(1, 1, -1)) / (_gridSize + 2) + offset,
-		p[7] = (threadId + float3(-1, 1, -1)) / (_gridSize + 2) + offset
+		p[0] = (threadId + float3(0, 0, 1)) / (_gridSize - 1) + offset,
+		p[1] = (threadId + float3(1, 0, 1)) / (_gridSize - 1) + offset,
+		p[2] = (threadId + float3(1, 0, 0)) / (_gridSize - 1) + offset,
+		p[3] = (threadId + float3(0, 0, 0)) / (_gridSize - 1) + offset,
+		p[4] = (threadId + float3(0, 1, 1)) / (_gridSize - 1) + offset,
+		p[5] = (threadId + float3(1, 1, 1)) / (_gridSize - 1) + offset,
+		p[6] = (threadId + float3(1, 1, 0)) / (_gridSize - 1) + offset,
+		p[7] = (threadId + float3(0, 1, 0)) / (_gridSize - 1) + offset
 	};
 
 	float val[8] = {
-		SampleData(threadId + int3(-1, -1, 1)),
-		SampleData(threadId + int3(1, -1, 1)),
-		SampleData(threadId + int3(1, -1, -1)),
-		SampleData(threadId + int3(-1, -1, -1)),
-		SampleData(threadId + int3(-1, 1, 1)),
+		SampleData(threadId + int3(0, 0, 1)),
+		SampleData(threadId + int3(1, 0, 1)),
+		SampleData(threadId + int3(1, 0, 0)),
+		SampleData(threadId + int3(0, 0, 0)),
+		SampleData(threadId + int3(0, 1, 1)),
 		SampleData(threadId + int3(1, 1, 1)),
-		SampleData(threadId + int3(1, 1, -1)),
-		SampleData(threadId + int3(-1, 1, -1))
+		SampleData(threadId + int3(1, 1, 0)),
+		SampleData(threadId + int3(0, 1, 0))
 	};
 
 	int cubeIndex = 0;
@@ -399,6 +415,8 @@ void MarchingCubes(uint3 threadId : SV_DispatchThreadID)
 			vertlist[11] = VertexInterp(p[3], p[7], val[3], val[7]);
 
 		for (int i = 0; triTable[cubeIndex][i] != -1; i += 3) {
+			Triangle t;
+
 			Vertex v0;
 			Vertex v1;
 			Vertex v2;
@@ -407,13 +425,10 @@ void MarchingCubes(uint3 threadId : SV_DispatchThreadID)
 			v1.vPosition = vertlist[triTable[cubeIndex][i + 1]];
 			v2.vPosition = vertlist[triTable[cubeIndex][i + 2]];
 
-			float3 normal = normalize(cross(v0.vPosition - v1.vPosition, v0.vPosition - v2.vPosition));
+			v0.vNormal = normalize(CalculateGradient(v0.vPosition));
+			v1.vNormal = normalize(CalculateGradient(v1.vPosition));
+			v2.vNormal = normalize(CalculateGradient(v2.vPosition));
 
-			v0.vNormal = normal;
-			v1.vNormal = normal;
-			v2.vNormal = normal;
-
-			Triangle t;
 			t.v[0] = v0;
 			t.v[1] = v1;
 			t.v[2] = v2;

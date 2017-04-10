@@ -24,11 +24,13 @@ namespace PavelKouril.MarchingCubesGPU
 
         private void Start()
         {
-            appendVertexBuffer = new ComputeBuffer(Resolution * Resolution * Resolution, sizeof(float) * 18, ComputeBufferType.Append);
+            appendVertexBuffer = new ComputeBuffer((Resolution - 1) * (Resolution - 1) * (Resolution - 1) * 5, sizeof(float) * 18, ComputeBufferType.Append);
             argBuffer = new ComputeBuffer(4, sizeof(int), ComputeBufferType.IndirectArguments);
 
             MarchingCubesCS.SetInt("_gridSize", Resolution);
             MarchingCubesCS.SetFloat("_isoLevel", 0.5f);
+
+            MarchingCubesCS.SetBuffer(kernelMC, "triangleRW", appendVertexBuffer);
         }
 
         private void Update()
@@ -36,7 +38,6 @@ namespace PavelKouril.MarchingCubesGPU
             MarchingCubesCS.SetTexture(kernelMC, "_densityTexture", DensityTexture);
             appendVertexBuffer.SetCounterValue(0);
 
-            MarchingCubesCS.SetBuffer(kernelMC, "triangleRW", appendVertexBuffer);
             MarchingCubesCS.Dispatch(kernelMC, Resolution / 8, Resolution / 8, Resolution / 8);
 
             int[] args = new int[] { 0, 1, 0, 0 };
