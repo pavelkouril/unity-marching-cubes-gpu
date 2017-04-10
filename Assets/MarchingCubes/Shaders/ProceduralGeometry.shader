@@ -4,8 +4,6 @@
 	{
 		Cull Back
 
-		Fog{ Mode off }
-
 		Pass
 		{
 			CGPROGRAM
@@ -49,7 +47,7 @@
 			float4 frag(v2f i) : SV_Target
 			{
 				float d = max(dot(normalize(_WorldSpaceLightPos0.xyz), i.normal), 0);
-				return float4(d, d, d, 1);
+				return float4(d,d,d, 1);
 			}
 			ENDCG
 		}

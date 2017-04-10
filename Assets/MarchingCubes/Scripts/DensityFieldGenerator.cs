@@ -41,7 +41,7 @@ namespace PavelKouril.MarchingCubesGPU
                     for (var x = 0; x < Resolution; ++x, ++idx)
                     {
                         var amount = Mathf.Pow(x - Resolution / 2, 2) + Mathf.Pow(y - Resolution / 2, 2) + Mathf.Pow(z - Resolution / 2, 2)
-                            <= Mathf.Pow(Resolution / 2 * Mathf.Sin(0.25f * Time.time), 2) ? 1 : 0;
+                            <= Mathf.Pow((Resolution - 2) / 2 * Mathf.Sin(0.25f * Time.time), 2) ? 1 : 0;
                         colors[idx] = new Color(amount, 0, 0);
                     }
                 }
