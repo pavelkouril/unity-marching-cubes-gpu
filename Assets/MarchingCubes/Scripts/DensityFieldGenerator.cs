@@ -19,6 +19,8 @@ namespace PavelKouril.MarchingCubesGPU
             densityTexture = new Texture3D(Resolution, Resolution, Resolution, TextureFormat.RFloat, false);
             densityTexture.wrapMode = TextureWrapMode.Clamp;
             colors = new Color[Resolution * Resolution * Resolution];
+
+            for (int i = 0; i < colors.Length; i++) colors[i] = Color.white;
         }
 
         private void Start()
@@ -34,15 +36,19 @@ namespace PavelKouril.MarchingCubesGPU
         private void GenerateSoil()
         {
             var idx = 0;
+            float sx, sy, sz;
+            float resol = (Resolution - 2) / 2 * Mathf.Sin(0.25f * Time.time);
             for (var z = 0; z < Resolution; ++z)
             {
                 for (var y = 0; y < Resolution; ++y)
                 {
                     for (var x = 0; x < Resolution; ++x, ++idx)
                     {
-                        var amount = Mathf.Pow(x - Resolution / 2, 2) + Mathf.Pow(y - Resolution / 2, 2) + Mathf.Pow(z - Resolution / 2, 2)
-                            <= Mathf.Pow((Resolution - 2) / 2 * Mathf.Sin(0.25f * Time.time), 2) ? 1 : 0;
-                        colors[idx] = new Color(amount, 0, 0);
+                        sx = x - Resolution / 2;
+                        sy = y - Resolution / 2;
+                        sz = z - Resolution / 2;
+                        var amount = (sx * sx + sy * sy + sz * sz) <= resol * resol ? 1 : 0;
+                        colors[idx].r = amount;
                     }
                 }
             }
